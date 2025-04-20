@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QGridLayout, QSizePolicy, QLabel
 from PyQt5 import QtCore
@@ -169,7 +169,6 @@ if __name__ == "__main__":
     window = TelemetryDashboard()
     window.show()
     sys.exit(app.exec_())
-=======
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QGridLayout, QSizePolicy, QLabel
 from PyQt5.QtCore import QTimer, QMetaObject, Qt
@@ -360,4 +359,3 @@ if __name__ == "__main__":
     window = Graph()
     window.show()
     sys.exit(app.exec_())
->>>>>>> dcffa7b7e9bddd0f066d2c1264ccd995432abdf6

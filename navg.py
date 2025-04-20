@@ -8,7 +8,6 @@ from console import Ui_GCA as ConsolePage  # Import ConsolePage
 from graphs import Graph as Graph
 from map import Ui_MainWindow as MapPage
 
-
 class MainApp(QMainWindow):
     def __init__(self):
         super(MainApp, self).__init__()

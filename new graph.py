@@ -8,6 +8,7 @@ import serial.tools.list_ports
 import threading
 from PyQt5.QtGui import QFont
 
+
 class TelemetryDashboard(QMainWindow):
     update_graphs_signal = pyqtSignal(dict)
 

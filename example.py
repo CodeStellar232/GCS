@@ -3,6 +3,7 @@ import sys
 from PyQt5.QtWidgets import QApplication, QVBoxLayout, QLabel, QPushButton, QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
+
 def locationCoordinates():
     try:
         response = requests.get('https://ipinfo.io')

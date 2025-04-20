@@ -3,9 +3,6 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.uic import loadUi
 import resource_rc
 
-
-
-
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()

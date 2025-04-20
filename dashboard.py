@@ -38,7 +38,7 @@ class Ui_GCA(QtCore.QObject):
 
         self.label_2 = QtWidgets.QLabel("PORT", self.groupBox_3)
         self.label_2.setGeometry(QtCore.QRect(10, 30, 55, 16))
-        
+########
         self.label_3 = QtWidgets.QLabel("BAUD RATE", self.groupBox_3)
         self.label_3.setGeometry(QtCore.QRect(10, 90, 61, 16))
         

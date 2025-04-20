@@ -72,7 +72,6 @@ class MainWindow(QMainWindow):
         self.dashboard_ui = DashboardPage()
         self.dashboard_ui.setupUi(self.dashboard_page)
         self.stackedWidget.addWidget(self.dashboard_page)
-
         # Console Page
         self.console_page = QWidget()
         self.console_ui = ConsolePage()
