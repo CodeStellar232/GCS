@@ -1,29 +1,31 @@
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QTextEdit, QLineEdit, QPushButton,
+    QWidget, QTextEdit, QLineEdit, QPushButton,QApplication,
     QListWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
     QGroupBox, QGridLayout, QComboBox
 )
 from PyQt5.QtGui import QTextCursor
-from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtCore import QTimer,Qt
 from datetime import datetime
-import sys
 import serial
 import serial.tools.list_ports
-
+import sys
 
 
 class ConsoleUI(QWidget):
-    def __init__(self):  # Corrected method name
-        super().__init__()
+    def __init__(self):
+        super(ConsoleUI, self).__init__()
         self.setWindowTitle("GCS Console")
+        
 
-        main_layout = QGridLayout()
+        # Main layout
+        main_layout = QGridLayout(self)
         self.console_output = QTextEdit()
         self.console_output.setReadOnly(True)
         self.console_output.setPlaceholderText("Console Output...")
         main_layout.addWidget(QLabel("Console Output"), 0, 0)
         main_layout.addWidget(self.console_output, 1, 0, 2, 1)
 
+        # Command input layout
         command_layout = QHBoxLayout()
         self.command_input = QLineEdit()
         self.command_input.setPlaceholderText("Enter Command")
@@ -38,7 +40,7 @@ class ConsoleUI(QWidget):
         main_layout.addWidget(QLabel("Command History"), 0, 1)
         main_layout.addWidget(self.command_history_list, 1, 1)
 
-
+        # Packet group
         packet_group = QGroupBox("Packet Info")
         packet_layout = QVBoxLayout()
 
@@ -59,6 +61,7 @@ class ConsoleUI(QWidget):
         packet_group.setLayout(packet_layout)
         main_layout.addWidget(packet_group, 2, 1, 2, 1)
 
+        # Serial port layout
         serial_layout = QHBoxLayout()
         self.port_selector = QComboBox()
         self.refresh_ports()
@@ -68,8 +71,6 @@ class ConsoleUI(QWidget):
         serial_layout.addWidget(self.port_selector)
         serial_layout.addWidget(self.connect_button)
         main_layout.addLayout(serial_layout, 4, 0, 1, 2)
-
-        self.setLayout(main_layout)
 
         self.command_history = []
 
@@ -96,6 +97,7 @@ class ConsoleUI(QWidget):
                 self.serial_port = serial.Serial(port, 9600, timeout=0.1)
                 self.serial_timer.start(200)
                 self.console_output.append(f"[INFO] Connected to {port} at 9600 baud.")
+                self.textBrowser.setText(f"Arduino detected on port: {port}\n")
             except Exception as e:
                 self.console_output.append(f"[ERROR] Could not open serial port: {str(e)}")
 
@@ -206,6 +208,9 @@ class ConsolePageUI:
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
 
+        if hasattr(self.console_ui, 'console_output') and self.console_ui.console_output is not None:
+            self.console_ui.console_output.append("Your message here")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -213,4 +218,3 @@ if __name__ == "__main__":
     window.resize(900, 600)
     window.show()
     sys.exit(app.exec_())
-

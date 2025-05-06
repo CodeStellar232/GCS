@@ -1,132 +1,123 @@
-from PyQt5 import QtCore, QtGui, QtWidgets
+import sys
+import time
+import threading
+import requests
+from PyQt5.QtCore import QTimer, QObject, pyqtSignal, QCoreApplication, QtCore
+from PyQt5 import QtWidgets
+from PyQt5.QtWidgets import QApplication
 
+TWO_MINUTES = 120000  # milliseconds
+class Ui_GCA(QtCore.QObject):
+    data_received = QtCore.pyqtSignal(str)
 
-class Ui_MainWindow(object):
-    def setupUi(self, MainWindow):
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1135, 665)
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.frame = QtWidgets.QFrame(self.centralwidget)
-        self.frame.setGeometry(QtCore.QRect(10, 10, 1110, 592))
+    def setupUi(self, GCA):
+        GCA.setObjectName("GCA")
+        GCA.resize(1132, 650)
+        self.gridLayout = QtWidgets.QGridLayout(GCA)
+        self.gridLayout.setObjectName("gridLayout")
+        self.frame = QtWidgets.QFrame(GCA)
         self.frame.setFrameShape(QtWidgets.QFrame.StyledPanel)
         self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
         self.frame.setObjectName("frame")
-        self.groupBox_2 = QtWidgets.QGroupBox(self.frame)
-        self.groupBox_2.setGeometry(QtCore.QRect(120, 120, 981, 461))
-        self.groupBox_2.setObjectName("groupBox_2")
-        self.textBrowser = QtWidgets.QTextBrowser(self.groupBox_2)
-        self.textBrowser.setGeometry(QtCore.QRect(0, 20, 981, 441))
-        self.textBrowser.setObjectName("textBrowser")
-        self.graphicsView = QtWidgets.QGraphicsView(self.groupBox_2)
-        self.graphicsView.setGeometry(QtCore.QRect(370, 60, 571, 361))
-        self.graphicsView.setObjectName("graphicsView")
-        self.frame_2 = QtWidgets.QFrame(self.frame)
-        self.frame_2.setGeometry(QtCore.QRect(120, 0, 991, 101))
-        self.frame_2.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.frame_2.setFrameShadow(QtWidgets.QFrame.Raised)
-        self.frame_2.setObjectName("frame_2")
-        self.groupBox_8 = QtWidgets.QGroupBox(self.frame_2)
-        self.groupBox_8.setGeometry(QtCore.QRect(10, 0, 171, 51))
-        self.groupBox_8.setObjectName("groupBox_8")
-        self.toolButton = QtWidgets.QToolButton(self.groupBox_8)
-        self.toolButton.setGeometry(QtCore.QRect(10, 20, 161, 21))
-        self.toolButton.setObjectName("toolButton")
-        self.groupBox_17 = QtWidgets.QGroupBox(self.frame_2)
-        self.groupBox_17.setGeometry(QtCore.QRect(10, 50, 171, 41))
-        self.groupBox_17.setObjectName("groupBox_17")
-        self.toolButton_3 = QtWidgets.QToolButton(self.groupBox_17)
-        self.toolButton_3.setGeometry(QtCore.QRect(10, 20, 161, 21))
-        self.toolButton_3.setObjectName("toolButton_3")
-        self.groupBox_18 = QtWidgets.QGroupBox(self.frame_2)
-        self.groupBox_18.setGeometry(QtCore.QRect(820, 0, 171, 51))
-        self.groupBox_18.setObjectName("groupBox_18")
-        self.toolButton_4 = QtWidgets.QToolButton(self.groupBox_18)
-        self.toolButton_4.setGeometry(QtCore.QRect(10, 20, 161, 21))
-        self.toolButton_4.setObjectName("toolButton_4")
-        self.groupBox_19 = QtWidgets.QGroupBox(self.groupBox_18)
-        self.groupBox_19.setGeometry(QtCore.QRect(10, 50, 171, 51))
-        self.groupBox_19.setObjectName("groupBox_19")
-        self.toolButton_5 = QtWidgets.QToolButton(self.groupBox_19)
-        self.toolButton_5.setGeometry(QtCore.QRect(10, 20, 161, 21))
-        self.toolButton_5.setObjectName("toolButton_5")
-        self.groupBox_20 = QtWidgets.QGroupBox(self.frame_2)
-        self.groupBox_20.setGeometry(QtCore.QRect(820, 50, 171, 51))
-        self.groupBox_20.setObjectName("groupBox_20")
-        self.toolButton_6 = QtWidgets.QToolButton(self.groupBox_20)
-        self.toolButton_6.setGeometry(QtCore.QRect(10, 20, 161, 21))
-        self.toolButton_6.setObjectName("toolButton_6")
-        self.toolBox = QtWidgets.QToolBox(self.frame)
-        self.toolBox.setGeometry(QtCore.QRect(0, 0, 111, 591))
-        self.toolBox.setObjectName("toolBox")
-        self.page = QtWidgets.QWidget()
-        self.page.setGeometry(QtCore.QRect(0, 0, 111, 405))
-        self.page.setObjectName("page")
-        self.toolBox.addItem(self.page, "")
-        self.page_2 = QtWidgets.QWidget()
-        self.page_2.setGeometry(QtCore.QRect(0, 0, 111, 405))
-        self.page_2.setObjectName("page_2")
-        self.toolBox.addItem(self.page_2, "")
-        self.page_3 = QtWidgets.QWidget()
-        self.page_3.setGeometry(QtCore.QRect(0, 0, 111, 405))
-        self.page_3.setObjectName("page_3")
-        self.toolBox.addItem(self.page_3, "")
-        self.page_4 = QtWidgets.QWidget()
-        self.page_4.setGeometry(QtCore.QRect(0, 0, 111, 405))
-        self.page_4.setObjectName("page_4")
-        self.toolBox.addItem(self.page_4, "")
-        self.page_5 = QtWidgets.QWidget()
-        self.page_5.setGeometry(QtCore.QRect(0, 0, 111, 405))
-        self.page_5.setObjectName("page_5")
-        self.toolBox.addItem(self.page_5, "")
-        self.page_6 = QtWidgets.QWidget()
-        self.page_6.setGeometry(QtCore.QRect(0, 0, 111, 405))
-        self.page_6.setObjectName("page_6")
-        self.label_4 = QtWidgets.QLabel(self.page_6)
-        self.label_4.setGeometry(QtCore.QRect(20, 370, 61, 31))
-        self.label_4.setObjectName("label_4")
-        self.toolBox.addItem(self.page_6, "")
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 1135, 26))
-        self.menubar.setObjectName("menubar")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
 
-        self.retranslateUi(MainWindow)
-        self.toolBox.setCurrentIndex(5)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
+class Location:
+    def __init__(self, lat, lon, accuracy=10, provider="mock", timestamp=None):
+        self.latitude = lat
+        self.longitude = lon
+        self.accuracy = accuracy
+        self.provider = provider
+        self.time = timestamp or int(time.time() * 1000)
 
-    def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.groupBox_2.setTitle(_translate("MainWindow", "MAP"))
-        self.groupBox_8.setTitle(_translate("MainWindow", "TIME "))
-        self.toolButton.setText(_translate("MainWindow", "DISCONNECTED"))
-        self.groupBox_17.setTitle(_translate("MainWindow", "BATTERY"))
-        self.toolButton_3.setText(_translate("MainWindow", "DISCONNECTED"))
-        self.groupBox_18.setTitle(_translate("MainWindow", "BATTERY"))
-        self.toolButton_4.setText(_translate("MainWindow", "DISCONNECTED"))
-        self.groupBox_19.setTitle(_translate("MainWindow", "TIME "))
-        self.toolButton_5.setText(_translate("MainWindow", "DISCONNECTED"))
-        self.groupBox_20.setTitle(_translate("MainWindow", "SIGNAL"))
-        self.toolButton_6.setText(_translate("MainWindow", "DISCONNECTED"))
-        self.toolBox.setItemText(self.toolBox.indexOf(self.page), _translate("MainWindow", "Page 1"))
-        self.toolBox.setItemText(self.toolBox.indexOf(self.page_2), _translate("MainWindow", "Page 2"))
-        self.toolBox.setItemText(self.toolBox.indexOf(self.page_3), _translate("MainWindow", "Page"))
-        self.toolBox.setItemText(self.toolBox.indexOf(self.page_4), _translate("MainWindow", "Page"))
-        self.toolBox.setItemText(self.toolBox.indexOf(self.page_5), _translate("MainWindow", "Page"))
-        self.label_4.setText(_translate("MainWindow", "WELCOME"))
-        self.toolBox.setItemText(self.toolBox.indexOf(self.page_6), _translate("MainWindow", "Page"))
+class LocationService(QObject):
+    location_updated = pyqtSignal(Location)
 
+    def __init__(self):
+        super().__init__()
+        self.previous_best_location = None
+        self.is_running = False
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.check_location)
+
+    def start(self):
+        self.is_running = True
+        self.timer.start(TWO_MINUTES)
+
+    def stop(self):
+        self.timer.stop()
+        self.is_running = False
+        
+# try to fetch coordinates from gps
+    def get_current_location(self):
+        # Placeholder for real GPS data
+        # Use geopy or gpsd here in real implementation
+        lat, lon = 23.0225, 72.5714  # Example: Ahmedabad coords
+        return Location(lat, lon)
+
+    def check_location(self):
+        if not self.is_running:
+            self.start()
+
+        new_location = self.get_current_location()
+
+        if self.is_better_location(new_location, self.previous_best_location):
+            self.previous_best_location = new_location
+            self.post_location_to_server(new_location)
+            self.stop()
+
+    def post_location_to_server(self, location):
+        try:
+            device_key = "mock-device-id"  # Replace with real device ID logic
+            url = "https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d13961.993727457553!2d77.64214655!3d28.972597699999998!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2sin!4v1745406415227!5m2!1sen!2sin"
+            data = {
+                'device_key': device_key,
+                'latitude': str(location.latitude),
+                'longitude': str(location.longitude),
+            }
+            response = requests.post(url, data=data)
+            print("Server Response:", response.status_code)
+        except Exception as e:
+            print("Error posting location:", e)
+
+    def is_better_location(self, location, current_best_location):
+        if current_best_location is None:
+            return True
+
+        time_delta = location.time - current_best_location.time
+        is_significantly_newer = time_delta > TWO_MINUTES
+        is_significantly_older = time_delta < -TWO_MINUTES
+        is_newer = time_delta > 0
+
+        if is_significantly_newer:
+            return True
+        elif is_significantly_older:
+            return False
+
+        accuracy_delta = location.accuracy - current_best_location.accuracy
+        is_less_accurate = accuracy_delta > 0
+        is_more_accurate = accuracy_delta < 0
+        is_significantly_less_accurate = accuracy_delta > 200
+
+        is_from_same_provider = location.provider == current_best_location.provider
+
+        if is_more_accurate:
+            return True
+        elif is_newer and not is_less_accurate:
+            return True
+        elif is_newer and not is_significantly_less_accurate and is_from_same_provider:
+            return True
+
+        return False
+
+def main():
+    app = QCoreApplication(sys.argv)
+    service = LocationService()
+    service.start()
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
-    sys.exit(app.exec_())
+    main()
+    app = QApplication(sys.argv)
+    MainWindow = QtWidgets.QMainWindow()  
+    ui = Ui_GCA()
+    ui.setupUi(MainWindow)    

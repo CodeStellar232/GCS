@@ -1,0 +1,8 @@
+import geopandas as gpd
+import folium
+import mapclassify
+from matplotlib import pppyplot as plt
+file = gpd.read_file('data/geojson/geojson_file.geojson')
+file.head()
+file.plot()
+plt.show()

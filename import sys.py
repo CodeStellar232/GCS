@@ -1,14 +1,14 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QStackedWidget, QPushButton, QLabel, QHBoxLayout
 from PyQt5.QtCore import QMetaObject, Qt, QSize
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QTextCursor
 from dashboard import Ui_GCA as DashboardPage
 from console import ConsoleUI as ConsolePage
-from graphs import TelemetryDashboard  # Import the Graph class
-import resource_rc
-import serial
+from graphs import TelemetryDashboard
 import serial.tools.list_ports
 import threading
+import resource_rc
+import time
 
 
 class MainWindow(QMainWindow):
@@ -16,7 +16,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__()
         self.setWindowTitle("Navigation Example")
         self.resize(799, 600)
-        self.arduino_connected = False  # Initialize arduino_connected
+        self.arduino_connected = False
         self.setupUi()
 
     def setupUi(self):
@@ -72,18 +72,18 @@ class MainWindow(QMainWindow):
         self.dashboard_ui = DashboardPage()
         self.dashboard_ui.setupUi(self.dashboard_page)
         self.stackedWidget.addWidget(self.dashboard_page)
-        # Console Page
-        self.console_page = QWidget()
-        self.console_ui = ConsolePage()
-        self.console_ui.setupUi(self.console_page)
-        self.stackedWidget.addWidget(self.console_page)
+
+        # Console Page - No need to call `setupUi()` again!
+    
+        self.console_ui = ConsolePage() # Directly use ConsoleUI
+        self.stackedWidget.addWidget(self.console_ui)
 
         # Graph Page
-        self.graph_page = TelemetryDashboard()  # Directly use the Graph class from graphs.py
+        self.graph_page = TelemetryDashboard()
         self.stackedWidget.addWidget(self.graph_page)
 
         # Map Page (Placeholder for now)
-        self.map_page = QWidget()  # Placeholder for MapPage
+        self.map_page = QWidget()
         self.map_ui = QLabel("Map Page Placeholder", self.map_page)
         self.map_ui.setAlignment(Qt.AlignCenter)
         self.stackedWidget.addWidget(self.map_page)
@@ -92,14 +92,13 @@ class MainWindow(QMainWindow):
         self.create_placeholder_page("TRAJECTORY PAGE")
         self.create_placeholder_page("ABOUT PAGE")
 
-        # Detect Arduino and start reading data
+        # Detect Arduino AFTER all UI elements are ready
         self.detect_arduino()
 
+        # Start Serial Reading Thread if Arduino is connected
         if self.arduino_connected:
             self.serial_thread = threading.Thread(target=self.read_serial_data, daemon=True)
             self.serial_thread.start()
-        else:
-            self.console_ui.textBrowser.setText("Arduino not detected!")
 
     def create_nav_button(self, icon_path):
         button = QPushButton()
@@ -133,30 +132,50 @@ class MainWindow(QMainWindow):
                 self.arduino_connected = True
                 self.arduino_port = port.device
                 print(f"Arduino detected on port: {self.arduino_port}")
-                self.console_ui.textBrowser.setText(f"Arduino detected on port: {self.arduino_port}\n")
+                if hasattr(self.console_ui, 'console_output') and self.console_ui.console_output is not None:
+                    self.console_ui.console_output.append(f"Arduino detected on port: {self.arduino_port}\n")
                 return
         self.arduino_connected = False
         print("No Arduino detected.")
-        self.console_ui.textBrowser.setText("No Arduino detected.")
+        if hasattr(self.console_ui, 'console_output') and self.console_ui.console_output is not None:
+            self.console_ui.console_output.append("No Arduino detected.")
 
     def read_serial_data(self):
+
         """Read serial data from Arduino and update the textBrowser."""
         try:
+           # time.sleep(1)  # Add a 1-second delay before opening the port
+            print(f"Attempting to open port: {self.arduino_port}")
             with serial.Serial(self.arduino_port, 9600, timeout=1) as ser:
                 while self.arduino_connected:
                     line = ser.readline().decode('utf-8').strip()
                     if line:
                         print(f"Received data: {line}")
                         QMetaObject.invokeMethod(
-                            self.console_ui.textBrowser,
+                            self.console_ui.console_output,
                             "append",
                             Qt.QueuedConnection,
                             Qt.Q_ARG(str, line)
                         )
         except serial.SerialException as e:
             print(f"Serial error: {e}")
-            self.console_ui.textBrowser.setText(f"Serial error: {e}")
             self.arduino_connected = False
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+        if self.serial_port and self.serial_port.in_waiting:
+            try:
+                raw_line = self.serial_port.readline().decode("utf-8", errors="ignore").strip()
+                if raw_line:
+                    self.console_output.append(raw_line)
+                    self.console_output.moveCursor(QTextCursor.End)
+
+                    packet_id = self.extract_packet_id(raw_line)
+                    is_corrupt = "FAIL" in raw_line
+                    self.add_packet_info(raw_line)
+                    self.update_packet_info(packet_id, is_corrupt=is_corrupt)
+            except Exception as e:
+                self.console_output.append(f"[ERROR] Failed to read serial: {str(e)}")
+        # Remove redundant exception handling block
 
 
 if __name__ == "__main__":
