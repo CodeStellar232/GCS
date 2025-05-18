@@ -1,22 +1,26 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QStackedWidget, QPushButton, QLabel, QHBoxLayout
 from PyQt5.QtCore import QMetaObject, Qt, QSize
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QTextCursor
 from dashboard import Ui_GCA as DashboardPage
-from console import ConsoleUI as ConsolePage
-from graphs import TelemetryDashboard
+from console import ConsolePage as ConsolePage
+from graphs import GraphsPage as TelemetryDashboard
+from trajectory import InfoPanel as InfoPanel
 import serial.tools.list_ports
 import threading
 import resource_rc
 import time
+from manager import SerialManager as SerialManager
+from PyQt5 import QtCore
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, SerialManager=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle("Navigation Example")
         self.resize(799, 600)
         self.arduino_connected = False
+        self.serial_port = None  # <-- Add this line
         self.setupUi()
 
     def setupUi(self):
@@ -74,7 +78,8 @@ class MainWindow(QMainWindow):
         self.stackedWidget.addWidget(self.dashboard_page)
 
         # Console Page - No need to call `setupUi()` again!
-        self.console_ui = ConsolePage()  # Directly use ConsoleUI
+    
+        self.console_ui = ConsolePage() # Directly use ConsoleUI
         self.stackedWidget.addWidget(self.console_ui)
 
         # Graph Page
@@ -143,7 +148,7 @@ class MainWindow(QMainWindow):
 
         """Read serial data from Arduino and update the textBrowser."""
         try:
-            time.sleep(1)  # Add a 1-second delay before opening the port
+           # time.sleep(1)  # Add a 1-second delay before opening the port
             print(f"Attempting to open port: {self.arduino_port}")
             with serial.Serial(self.arduino_port, 9600, timeout=1) as ser:
                 while self.arduino_connected:
@@ -156,25 +161,42 @@ class MainWindow(QMainWindow):
                             Qt.QueuedConnection,
                             Qt.Q_ARG(str, line)
                         )
-                        packet_id = self.extract_packet_id(line)
-                        is_corrupt = "FAIL" in line
-                        self.add_packet_info(line)
-                        self.update_packet_info(packet_id, is_corrupt=is_corrupt)
         except serial.SerialException as e:
             print(f"Serial error: {e}")
             self.arduino_connected = False
         except Exception as e:
-            print(f"unexpected error: {e}")
+            print(f"Unexpected error: {e}")
+        if self.serial_port and self.serial_port.in_waiting:
+            try:
+                raw_line = self.serial_port.readline().decode("utf-8", errors="ignore").strip()
+                if raw_line:
+                    self.console_output.append(raw_line)
+                    self.console_output.moveCursor(QTextCursor.End)
+
+                    packet_id = self.extract_packet_id(raw_line)
+                    is_corrupt = "FAIL" in raw_line
+                    self.add_packet_info(raw_line)
+                    self.update_packet_info(packet_id, is_corrupt=is_corrupt)
+            except Exception as e:
+                self.console_output.append(f"[ERROR] Failed to read serial: {str(e)}")
+        # Remove redundant exception handling block
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     mainWin = MainWindow()
     mainWin.show()
-
-    # Print available serial ports
-    ports = serial.tools.list_ports.comports()
-    for port in ports:
-        print(f"Port: {port.device}, Description: {port.description}")
-
     sys.exit(app.exec_())
+
+
+# In dashboard.py or wherever you setup the dashboard UI
+def setupUi(self, DashboardWidget):
+    layout = QVBoxLayout(DashboardWidget)
+    # Remove or comment out any layout.addStretch() or layout.addSpacerItem() at the top
+
+    # Add the data display widget first
+    layout.addWidget(self.data_display_widget)  # This should be your main data display
+
+    # Add other widgets (buttons, etc.) below if needed
+    layout.addWidget(self.clear_button)
+    # ...other widgets...

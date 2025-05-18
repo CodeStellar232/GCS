@@ -1,171 +1,163 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QGridLayout, QSizePolicy, QLabel
-from PyQt5 import QtCore
-from PyQt5.QtCore import QTimer, pyqtSignal
-import pyqtgraph as pg
-import serial
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QDialog, QWidget, QStackedWidget, QPushButton, QLabel, QHBoxLayout, QComboBox, QGroupBox, QRadioButton
+from PyQt5.QtCore import QMetaObject, Qt, QSize, QTimer
+from PyQt5.QtGui import QIcon, QTextCursor
 import serial.tools.list_ports
+import serial
 import threading
-from PyQt5.QtGui import QFont
 
 
-class TelemetryDashboard(QMainWindow):
-    update_graphs_signal = pyqtSignal(dict)
-
+class SerialManager(QDialog):
     def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Graph")
-        self.setGeometry(100, 100, 1100, 650)
-        self.update_graphs_signal.connect(self.update_graphs)  
+        super(SerialManager, self).__init__()
+        self.setWindowTitle("Serial Manager")
+        self.resize(300, 120)
 
-        self.arduino_connected = False
-        self.x_data = []
-        self.serial_data = []
-        self.arduino_port = None
+        layout = QVBoxLayout(self)
+        self.port_combo = QComboBox()
+        self.refresh_ports()
+        layout.addWidget(QLabel("Select Serial Port:"))
+        layout.addWidget(self.port_combo)
 
-        main_layout = QVBoxLayout()
-        grid_layout = QGridLayout()
-        grid_layout.setSpacing(15)
+        self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(self.accept)
+        layout.addWidget(self.ok_button)
 
-        self.graph_specs = [
-            ("Pressure [Pa]", ["Pressure"]),
-            ("Altitude [m]", ["Altitude"]),
-            ("Voltage [V]", ["Voltage"]),
-            ("Current [A]", ["Current"]),
-            ("Accelerometer [m/s²]", ["AccX", "AccY", "AccZ"]),
-            ("Gyroscope [rad/s]", ["GyroX", "GyroY", "GyroZ"]),
-            ("Orientation [Degree]", ["Orientation"]),
-            ("Temperature [°C]", ["Temperature"])
-        ]
-
-        self.graphs = {}
-        self.curves = {}
-        self.data = {}
-
-        positions = [(i // 4, i % 4) for i in range(len(self.graph_specs))]
-
-        for pos, (title, label) in zip(positions, self.graph_specs):
-            graph = self.create_graph(title, label)
-            graph.setStyleSheet("border: 2px solid gray;")
-            grid_layout.addWidget(graph, *pos)
-
-        self.serial_monitor = QLabel("Serial Monitor:\n")
-        self.serial_monitor.setStyleSheet("color: black; background-color: white; padding: 6px;")
-        self.serial_monitor.setFont(QFont('Arial', 10))
-
-        main_layout.addLayout(grid_layout)
-        main_layout.addWidget(self.serial_monitor)
-
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        self.setCentralWidget(central_widget)
-
-        self.detect_arduino()
-
-        
-        self.timer = QTimer()
-        self.timer.setInterval(1000)
-        self.timer.timeout.connect(self.update_graphs)
-        self.timer.start()
-
-    def create_graph(self, title, label):
-        plot_widget = pg.PlotWidget(title=title)
-        plot_widget.setBackground("black")
-        plot_widget.showGrid(x=True, y=True)
-        plot_widget.legeng = pg.LegendItem(offset=(70, 30))
-        plot_widget.legeng.setParentItem(plot_widget.getPlotItem())
-
-        self.graphs[label[0]] = plot_widget
-        self.data[label[0]] = {'x': [], 'y': []}
-        self.curves[label[0]] = plot_widget.plot([], [], pen=pg.mkPen(color='w', width=2))
-
-        return plot_widget
-
-
-    def read_serial_data(self):
-        ser = None
-        try:
-            if self.arduino_port is not None:
-                ser = serial.Serial(self.arduino_port, 9600, timeout=1)
-                print(f"Connected to {self.arduino_port}")
-
-                while self.arduino_connected:
-                    try:
-                        line = ser.readline().decode('utf-8').strip()
-                        if line:
-                            print(f"Received data: {line}")
-                            self.serial_data.append(line)
-                            self.serial_data = self.serial_data[-2:]  # Keep only last 2 entries
-                            new_data = self.parse_serial_data(line)
-                            self.update_graphs_signal.emit(new_data)  # Emit safely to main thread
-                    except serial.SerialException:
-                        print("Serial connection lost. Reconnecting...")
-                        self.arduino_connected = False
-        finally:
-            if ser and ser.is_open:
-                ser.close()
-                print("Serial connection closed.")
-
-    def parse_serial_data(self, line):
-        data_dict = {}
-        try:
-            data_pairs = line.split(',')
-            for pair in data_pairs:
-                key, value = pair.split(':')
-                key = key.strip()
-                value = value.strip()
-                if key in self.data:
-                    self.data[key]['x'].append(len(self.data[key]['x']) + 1)
-                    self.data[key]['y'].append(float(value))
-                    data_dict[key] = {'x': self.data[key]['x'], 'y': self.data[key]['y']}
-        except Exception as e:
-            print(f"Error parsing data '{line}': {e}")
-        return data_dict
-
-    def update_graphs(self, new_data=None):
-        if not self.arduino_connected or new_data is None:
-            return
-
-        for title, values in new_data.items():
-            if title in self.graphs:
-                x_data = values['x'][-50:]  
-                y_data = values['y'][-50:]
-
-                self.data[title]['x'] = x_data
-                self.data[title]['y'] = y_data
-
-                self.curves[title].setData(x_data, y_data) 
-
-            self.update_serial_monitor()
-
-    def update_serial_monitor(self):
-        if len(self.serial_data) >= 2:
-            self.serial_monitor.setText(f"Serial Monitor:\n{self.serial_data[-2]}\n{self.serial_data[-1]}")
-        elif len(self.serial_data) == 1:
-            self.serial_monitor.setText(f"Serial Monitor:\n{self.serial_data[-1]}")
-        else:
-            self.serial_monitor.setText("Serial Monitor:\nNo data received yet.")
-
-    def detect_arduino(self):
+    def refresh_ports(self):
+        """Refresh the list of available serial ports."""
+        self.port_combo.clear()
         ports = serial.tools.list_ports.comports()
         for port in ports:
-            if 'Arduino' in port.description or 'USB Serial' in port.description:
-                self.arduino_port = port.device
-                self.arduino_connected = True
-                self.serial_monitor.setText(f"Serial Monitor:\nArduino detected on port: {self.arduino_port}")
-                print(f"Arduino detected on port: {self.arduino_port}")
-                self.serial_thread = threading.Thread(target=self.read_serial_data, daemon=True)
-                self.serial_thread.start()  
-                return
+            self.port_combo.addItem(f"{port.device} - {port.description}")
 
-        self.serial_monitor.setText("Serial Monitor:\nNo Arduino detected. Please connect it via USB.")
-        print("No Arduino detected. Please connect it via USB.")
+    def selected_port(self):
+        """Return the selected port."""
+        if self.port_combo.count() > 0:
+            return self.port_combo.currentText().split(" - ")[0]
+        return None
 
 
-    
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super(MainWindow, self).__init__()
+        self.setWindowTitle("Navigation")
+        self.resize(799, 600)
+        self.arduino_connected = False
+        self.arduino_port = None
+
+        self.setupUi()
+
+        # Show SerialManager after a delay of 1 second
+        QTimer.singleShot(1000, self.show_serial_manager)
+
+    def setupUi(self):
+        self.centralwidget = QWidget(self)
+        self.setCentralWidget(self.centralwidget)
+        self.main_layout = QHBoxLayout(self.centralwidget)
+
+        self.nav_widget = QWidget(self.centralwidget)
+        self.nav_widget.setMaximumSize(QSize(50, 16777215))
+        self.nav_layout = QVBoxLayout(self.nav_widget)
+
+        self.db_btn = self.create_nav_button(":/icons/layout.png")
+        self.nav_layout.addWidget(self.db_btn)
+
+        self.console_btn = self.create_nav_button(":/icons/command-line.png")
+        self.nav_layout.addWidget(self.console_btn)
+
+        self.graph_btn = self.create_nav_button(":/icons/graph.png")
+        self.nav_layout.addWidget(self.graph_btn)
+
+        self.map_btn = self.create_nav_button(":/icons/placeholder.png")
+        self.nav_layout.addWidget(self.map_btn)
+
+        self.tjct_btn = self.create_nav_button(":/icons/heading.png")
+        self.nav_layout.addWidget(self.tjct_btn)
+
+        self.abt_btn = self.create_nav_button(":/icons/id-card.png")
+        self.nav_layout.addWidget(self.abt_btn)
+
+        self.main_layout.addWidget(self.nav_widget)
+
+        self.stackedWidget = QStackedWidget(self.centralwidget)
+        self.main_layout.addWidget(self.stackedWidget)
+
+        self.init_pages()
+
+        self.db_btn.clicked.connect(lambda: self.navigate_to(0))
+        self.console_btn.clicked.connect(lambda: self.navigate_to(1))
+        self.graph_btn.clicked.connect(lambda: self.navigate_to(2))
+        self.map_btn.clicked.connect(lambda: self.navigate_to(3))
+        self.tjct_btn.clicked.connect(lambda: self.navigate_to(4))
+        self.abt_btn.clicked.connect(lambda: self.navigate_to(5))
+
+    def init_pages(self):
+        self.dashboard_ui = QLabel("Dashboard Page Placeholder")
+        self.stackedWidget.addWidget(self.dashboard_ui)
+
+        self.console_ui = QTextCursor()
+        self.stackedWidget.addWidget(QLabel("Console Page Placeholder"))
+
+        self.graph_page = QLabel("Graph Page Placeholder")
+        self.stackedWidget.addWidget(self.graph_page)
+
+        self.map_page = QLabel("Map Page Placeholder")
+        self.stackedWidget.addWidget(self.map_page)
+
+        self.create_placeholder_page("TRAJECTORY PAGE")
+        self.create_about_page()
+
+    def create_nav_button(self, icon_path):
+        button = QPushButton()
+        button.setMinimumSize(QSize(35, 35))
+        button.setMaximumSize(QSize(35, 35))
+        button.setIcon(QIcon(icon_path))
+        button.setIconSize(QSize(30, 30))
+        button.setCheckable(True)
+        button.setAutoExclusive(True)
+        return button
+
+    def create_placeholder_page(self, text):
+        placeholder_page = QLabel(text)
+        placeholder_page.setAlignment(Qt.AlignCenter)
+        self.stackedWidget.addWidget(placeholder_page)
+
+    def create_about_page(self):
+        about_page = QLabel("About Page Placeholder")
+        about_page.setAlignment(Qt.AlignCenter)
+        self.stackedWidget.addWidget(about_page)
+
+    def navigate_to(self, index):
+        self.stackedWidget.setCurrentIndex(index)
+
+    def show_serial_manager(self):
+        """Show the SerialManager dialog."""
+        self.serial_manager = SerialManager()
+        self.serial_manager.show()  # Use show() instead of exec_() to make it non-blocking
+
+    def start_serial_thread(self):
+        """Start a thread to read serial data."""
+        self.serial_thread = threading.Thread(target=self.read_serial_data, daemon=True)
+        self.serial_thread.start()
+
+    def read_serial_data(self):
+        """Read data from the serial port."""
+        try:
+            print(f"Attempting to open port: {self.arduino_port}")
+            with serial.Serial(self.arduino_port, 9600, timeout=1) as ser:
+                while self.arduino_connected:
+                    line = ser.readline().decode('utf-8').strip()
+                    if line:
+                        print(f"Received data: {line}")
+        except serial.SerialException as e:
+            print(f"Serial error: {e}")
+            self.arduino_connected = False
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = TelemetryDashboard()
-    window.show()
+    mainWin = MainWindow()
+    mainWin.show()
     sys.exit(app.exec_())

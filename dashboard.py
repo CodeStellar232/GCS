@@ -19,8 +19,13 @@ class Ui_GCA(QtCore.QObject):
 
         # Dashboard
         self.groupBox_2 = QtWidgets.QGroupBox(self.frame)
-        self.groupBox_2.setGeometry(QtCore.QRect(120, 120, 741, 461))
+        self.groupBox_2.setGeometry(QtCore.QRect(200,200,1400,900))
         self.groupBox_2.setObjectName("groupBox_2")
+        self.telemetry_fields = [
+            "Team ID", "Timestamp", "Packet Count", "Altitude", "Pressure", "Temperature", "Voltage",
+            "GNSS Time", "GNSS Latitude", "GNSS Longitude", "GNSS Altitude", "GNSS Satellites",
+            "Accel X", "Accel Y", "Accel Z", "Gyro X", "Gyro Y", "Gyro Z", "Flight State"
+        ]
 
         # Clear Button
         self.clear_btn = QPushButton("Clear", self.groupBox_2)
@@ -33,7 +38,7 @@ class Ui_GCA(QtCore.QObject):
 
         # Serial Port Settings
         self.groupBox_3 = QtWidgets.QGroupBox(self.frame)
-        self.groupBox_3.setGeometry(QtCore.QRect(880, 120, 221, 211))
+        self.groupBox_3.setGeometry(QtCore.QRect(1100, 120, 221, 211))
         self.groupBox_3.setObjectName("groupBox_3")
 
         self.label_2 = QtWidgets.QLabel("PORT", self.groupBox_3)
@@ -55,7 +60,7 @@ class Ui_GCA(QtCore.QObject):
 
         # Data Logger Section
         self.groupBox_4 = QtWidgets.QGroupBox(self.frame)
-        self.groupBox_4.setGeometry(QtCore.QRect(880, 350, 221, 100))
+        self.groupBox_4.setGeometry(QtCore.QRect(1100, 350, 221, 100))
         self.groupBox_4.setObjectName("groupBox_4")
         self.groupBox_4.setTitle("Data Logger")
 
@@ -140,7 +145,16 @@ class Ui_GCA(QtCore.QObject):
             self.textBrowser.append(f"❌ Error reading data: {str(e)}")
 
     def update_text_browser(self, data):
-        self.textBrowser.append(data)
+        # Try to parse CSV data and display as field: value
+        parts = data.split(',')
+        if len(parts) == len(self.telemetry_fields):
+            formatted = "<b>Telemetry Data:</b><br>"
+            for field, value in zip(self.telemetry_fields, parts):
+                formatted += f"<b>{field}:</b> {value}<br>"
+            self.textBrowser.append(formatted)
+        else:
+            # Fallback: just display the raw data
+            self.textBrowser.append(data)
 
     def refresh_ports(self):
         self.comboBox_2.clear()

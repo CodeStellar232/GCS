@@ -1,20 +1,17 @@
 import sys
-from PyQt5.QtWidgets import (
-    QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame
-)
+from PyQt5.QtWidgets import (QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLabel, QFrame)
 from PyQt5.QtCore import QTimer, Qt, QUrl
 from PyQt5.QtGui import QColor, QVector3D
 from PyQt5.Qt3DCore import QEntity, QTransform
-from PyQt5.Qt3DExtras import (
-    Qt3DWindow, QOrbitCameraController, QPhongMaterial,
-    QPlaneMesh, QCuboidMesh
-)
+from PyQt5.Qt3DExtras import (Qt3DWindow, QOrbitCameraController, QPhongMaterial,
+                              QPlaneMesh, QCuboidMesh)
 from PyQt5.Qt3DRender import QCamera, QDirectionalLight, QMesh
-
+from manager import SerialManager  
 
 class InfoPanel(QFrame):
-    def __init__(self, parent=None):
+    def __init__(self, serial_manager, parent=None):
         super().__init__(parent)
+        self.serial_manager = serial_manager  # Store SerialManager separately
         self.setFixedWidth(250)
         self.setFrameShape(QFrame.StyledPanel)
         layout = QVBoxLayout()
@@ -38,9 +35,8 @@ class InfoPanel(QFrame):
             f"Orientation:\nRoll: {rotation.x():.0f}°\nPitch: {rotation.y():.0f}°\nYaw: {rotation.z():.0f}°"
         )
 
-
 class TrajectoryPage(QWidget):
-    def __init__(self):
+    def __init__(self, serial_manager=None):  # Accept SerialManager separately
         super().__init__()
         self.setWindowTitle("3D Trajectory Viewer")
         self.resize(1200, 700)
@@ -49,7 +45,7 @@ class TrajectoryPage(QWidget):
         self.container = self.createWindowContainer(self.view)
         self.container.setMinimumSize(800, 600)
 
-        self.info_panel = InfoPanel()
+        self.info_panel = InfoPanel(parent=self, serial_manager=serial_manager)  # Pass SerialManager separately
 
         layout = QHBoxLayout()
         layout.addWidget(self.info_panel)
@@ -72,8 +68,13 @@ class TrajectoryPage(QWidget):
     def _load_model(self):
         self.model_entity = QEntity(self.root_entity)
 
+        model_path = r"C:\Users\AYUSHI\Desktop\RESTART\PRARAMBH\.qodo\Main\assets\rocket.obj"
+        if not model_path:
+            print(f"Error: Model file not found at {model_path}")
+            return
+
         mesh = QMesh()
-        mesh.setSource(QUrl.fromLocalFile(r"C:\Users\AYUSHI\Desktop\RESTART\PRARAMBH\.qodo\Main\assets\rocket.obj"))  #Change path to your model
+        mesh.setSource(QUrl.fromLocalFile(model_path))
 
         material = QPhongMaterial()
         material.setDiffuse(QColor(200, 100, 200))
@@ -144,10 +145,9 @@ class TrajectoryPage(QWidget):
         rot = QVector3D(self.transform.rotationX(), self.transform.rotationY(), self.transform.rotationZ())
         self.info_panel.update_info(pos, rot)
 
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    viewer = TrajectoryPage()
+    serial_manager = SerialManager()  # Initialize SerialManager
+    viewer = TrajectoryPage(serial_manager)  # Pass SerialManager explicitly
     viewer.show()
     sys.exit(app.exec_())
-

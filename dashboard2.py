@@ -3,209 +3,192 @@ import threading
 import serial
 import serial.tools.list_ports
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox,
-    QComboBox, QPushButton, QFileDialog, QCheckBox, QGridLayout, QMessageBox
+    QApplication, QMainWindow, QWidget,
+    QVBoxLayout, QTableWidget, QTableWidgetItem,
+    QLabel, QSizePolicy, QMessageBox, QGridLayout
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
-from status_header import StatusHeaderWidget  
+from PyQt5.QtCore import Qt, QSize, pyqtSignal
 
-class TelemetryHandler(QObject):
+
+class SerialReader(QWidget):  # Change QObject to QWidget
     telemetry_received = pyqtSignal(dict)
 
+    def __init__(self, port=None, baudrate=9600, parent=None):
+        super().__init__(parent)
+        self.port = port
+        self.baudrate = baudrate
+        self.alive = False
+        self.thread = None
+        self.ser = None
+
+        # Add a layout and label for testing
+        layout = QVBoxLayout(self)
+        label = QLabel("Serial Reader Page", self)
+        layout.addWidget(label)
+
+    def start(self):
+        try:
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=1)
+        except serial.SerialException as e:
+            print(f"Failed to open serial port {self.port}: {e}")
+            return False
+        self.alive = True
+        self.thread = threading.Thread(target=self.read_loop, daemon=True)
+        self.thread.start()
+        return True
+
+    def stop(self):
+        self.alive = False
+        if self.thread:
+            self.thread.join(timeout=2)
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+
+    def read_loop(self):
+        """
+        Reads lines from serial port.
+        Expected each line in CSV format matching telemetry_fields order.
+        Example line:
+          AST123,2024-06-29 12:00:00,42,1234.5,101325,24.3,12.5,12:00:01,40.7128,-74.0060,10,7,0.01,0.02,0.98,0.1,0.0,-0.05,Nominal
+        """
+        telemetry_fields = [
+            "Team ID", "Timestamp", "Packet Count", "Altitude", "Pressure", "Temperature", "Voltage",
+            "GNSS Time", "GNSS Latitude", "GNSS Longitude", "GNSS Altitude", "GNSS Satellites",
+            "Accel X", "Accel Y", "Accel Z", "Gyro X", "Gyro Y", "Gyro Z", "Flight State"
+        ]
+        while self.alive:
+            try:
+                line = self.ser.readline().decode('utf-8').strip()
+                if line:
+                    parts = line.split(',')
+                    if len(parts) == len(telemetry_fields):
+                        # Map fields to values
+                        telemetry_data = dict(zip(telemetry_fields, parts))
+                        # Convert numerical fields to float or int as appropriate
+                        for key in ["Packet Count", "Altitude", "Pressure", "Temperature", "Voltage",
+                                    "GNSS Latitude", "GNSS Longitude", "GNSS Altitude", "GNSS Satellites",
+                                    "Accel X", "Accel Y", "Accel Z", "Gyro X", "Gyro Y", "Gyro Z"]:
+                            try:
+                                if key in telemetry_data:
+                                    # Convert satellite count and packet count to int
+                                    if key in ["Packet Count", "GNSS Satellites"]:
+                                        telemetry_data[key] = int(telemetry_data[key])
+                                    else:
+                                        telemetry_data[key] = float(telemetry_data[key])
+                            except ValueError:
+                                pass  # keep original string if conversion fails
+
+                        self.telemetry_received.emit(telemetry_data)
+                    else:
+                        print(f"Unexpected telemetry format: {line}")
+            except Exception as e:
+                print(f"Error reading serial data: {e}")
+
+
 class DashboardPage(QWidget):
-    def _init_(self):
-        super()._init_()
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Dashboard")
+        # Other initialization code...
+
+    def update_data(self, data):
+        """Update the dashboard with the received data."""
+        print(f"DashboardPage received data: {data}")
+        # Update the dashboard UI with the new data
+
+
+class TelemetryWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
         self.setWindowTitle("Dashboard")
         self.setGeometry(100, 100, 1280, 720)
+        self.resize(600, 550)
 
-        # Serial & Logging Vars
-        self.serial_port = None
-        self.logging_enabled = False
-        self.log_file_path = ""
-
-        # Telemetry Fields
         self.telemetry_fields = [
             "Team ID", "Timestamp", "Packet Count", "Altitude", "Pressure", "Temperature", "Voltage",
             "GNSS Time", "GNSS Latitude", "GNSS Longitude", "GNSS Altitude", "GNSS Satellites",
             "Accel X", "Accel Y", "Accel Z", "Gyro X", "Gyro Y", "Gyro Z", "Flight State"
         ]
-        self.labels = {f: QLabel(f"{f}:") for f in self.telemetry_fields}
-        self.values = {f: QLabel("-") for f in self.telemetry_fields}
 
-        # Setup UI
-        self.setupUI()
-        self.start_port_refresh()
+        self.serial_reader = None
 
-        # Timer for updating UI every second
-        self.update_timer = QTimer(self)
-        self.update_timer.timeout.connect(self.update_telemetry_ui_periodically)
-        self.update_timer.start(1000)  # Update every second
+        self.initUI()
+        self.find_and_start_serial()
 
-        # Initialize telemetry storage
-        self.latest_telemetry = {}
+    def initUI(self):
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
 
-        # Create a handler to signal updates to the main thread
-        self.telemetry_handler = TelemetryHandler()
-        self.telemetry_handler.telemetry_received.connect(self.update_telemetry_ui)
+        layout = QVBoxLayout(central_widget)
+        label = QLabel("Dashboard", self)
+        label.setAlignment(Qt.TopLeft)
+        label.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(label)
 
-    def setupUI(self):
-        main_layout = QHBoxLayout(self)
-        telemetry_group = QGroupBox("Dashboard")
-        telemetry_layout = QGridLayout()
+        # Create a grid layout for telemetry fields
+        telemetry_group = QWidget(self)
+        telemetry_layout = QGridLayout(telemetry_group)
 
-        for i, key in enumerate(self.telemetry_fields):
-            row, col = i // 3, i % 3
-            telemetry_layout.addWidget(self.labels[key], row, col * 2)
-            telemetry_layout.addWidget(self.values[key], row, col * 2 + 1)
+        
+        field_positions = [
+            ("Team ID", 0, 1), ("Timestamp", 0, 3), ("Packet Count", 0, 5),
+            ("Altitude", 1, 1), ("Pressure", 1, 3), ("Temperature", 1, 5),
+            ("Voltage", 2, 1), ("GNSS Time", 2, 3), ("GNSS Latitude", 2, 5),
+            ("GNSS Longitude", 3, 1), ("GNSS Altitude", 3, 3), ("GNSS Satellites", 3, 5),
+            ("Accel X", 4, 1), ("Accel Y", 4, 3), ("Accel Z", 4, 5),
+            ("Gyro X", 5, 1), ("Gyro Y", 5, 3), ("Gyro Z", 5, 5),
+            ("Flight State", 6, 1)
+        ]
 
-        telemetry_group.setLayout(telemetry_layout)
+        self.labels = {}
+        self.values = {}
 
-        # Right layout for serial/log controls
-        right_layout = QVBoxLayout()
+        for field, row, col in field_positions:
+            label = QLabel(f"{field}:", self)
+            value = QLabel("-", self)
+            telemetry_layout.addWidget(label, row, col)
+            telemetry_layout.addWidget(value, row, col + 1)
+            self.labels[field] = label
+            self.values[field] = value
 
-        # Serial group
-        self.combobox_ports = QComboBox()
-        self.baud_rate_selector = QComboBox()
-        self.baud_rate_selector.addItems(["9600", "19200", "38400", "57600", "115200"])
-        self.baud_rate_selector.setCurrentIndex(4)  # Default to 115200
+        layout.addWidget(telemetry_group)
 
-        self.connect_button = QPushButton("Connect")
-        self.connect_button.clicked.connect(self.toggle_serial_connection)
+    def find_and_start_serial(self):
+        """
+        Tries to find a connected Arduino port and start reading.
+        """
+        ports = serial.tools.list_ports.comports()
+        arduino_port = None
+        for port in ports:
+            if 'Arduino' in port.description or 'USB Serial Device' in port.description:
+                arduino_port = port.device
+                break
 
-        serial_group = QGroupBox("Serial Port Settings")
-        serial_layout = QVBoxLayout()
-        serial_layout.addWidget(QLabel("Port:"))
-        serial_layout.addWidget(self.combobox_ports)
-        serial_layout.addWidget(QLabel("Baud Rate:"))
-        serial_layout.addWidget(self.baud_rate_selector)
-        serial_layout.addWidget(self.connect_button)
-        serial_group.setLayout(serial_layout)
+        if not arduino_port:
+            QMessageBox.warning(self, "Port Not Found", "No Arduino or USB Serial Device detected.")
+            return
 
-        # Logging group
-        self.checkbox_logging = QCheckBox("Enable Logging")
-        self.checkbox_logging.stateChanged.connect(self.toggle_logging)
+        self.serial_reader = SerialReader(arduino_port)
+        self.serial_reader.telemetry_received.connect(self.update_telemetry)
+        started = self.serial_reader.start()
+        if not started:
+            QMessageBox.critical(self, "Error", f"Failed to open serial port {arduino_port}")
 
-        self.save_button = QPushButton("Log File")
-        self.save_button.setEnabled(False)
-        self.save_button.clicked.connect(self.select_log_file)
+    def update_telemetry(self, data: dict):
+        for field, value in data.items():
+            if field in self.telemetry_fields:
+                if field in self.values:
+                    self.values[field].setText(str(value))
 
-        logging_group = QGroupBox("Data Logging Settings")
-        logging_layout = QVBoxLayout()
-        logging_layout.addWidget(self.checkbox_logging)
-        logging_layout.addWidget(self.save_button)
-        logging_group.setLayout(logging_layout)
+    def closeEvent(self, event):
+        if self.serial_reader:
+            self.serial_reader.stop()
+        event.accept()
 
-        # Clear Button
-        self.clear_button = QPushButton("Clear")
-        self.clear_button.clicked.connect(self.clear_telemetry)
 
-        # Status Button
-        self.status_button = QPushButton("Status Window")
-        self.status_button.clicked.connect(self.toggle_status_window)
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = TelemetryWindow()
+    window.show()
+    sys.exit(app.exec_())
 
-        # Add to right layout
-        right_layout.addWidget(serial_group)
-        right_layout.addWidget(logging_group)
-        right_layout.addWidget(self.clear_button)
-        right_layout.addWidget(self.status_button)
-
-        main_layout.addWidget(telemetry_group, 3)
-        main_layout.addLayout(right_layout, 1)
-
-    def toggle_status_window(self):
-        if hasattr(self, 'status_window') and self.status_window.isVisible():
-            self.status_window.close()
-        self.status_window = StatusHeaderWidget()
-        self.status_window.show()
-
-    def start_port_refresh(self):
-        self.refresh_ports()
-        self.port_timer = QTimer()
-        self.port_timer.timeout.connect(self.refresh_ports)
-        self.port_timer.start(3000)
-
-    def refresh_ports(self):
-        ports = [port.device for port in serial.tools.list_ports.comports()]
-        current = self.combobox_ports.currentText()
-        self.combobox_ports.clear()
-        self.combobox_ports.addItems(ports)
-        if current in ports:
-            self.combobox_ports.setCurrentText(current)
-
-    def toggle_serial_connection(self):
-        if self.serial_port and self.serial_port.is_open:
-            self.serial_port.close()
-            self.connect_button.setText("Connect")
-        else:
-            try:
-                port = self.combobox_ports.currentText()
-                baud = int(self.baud_rate_selector.currentText())
-                self.serial_port = serial.Serial(port, baud, timeout=1)
-                threading.Thread(target=self.read_serial_data, daemon=True).start()
-                self.connect_button.setText("Disconnect")
-            except Exception as e:
-                QMessageBox.critical(self, "Connection Error", str(e))
-
-    def read_serial_data(self):
-        try:
-            while self.serial_port and self.serial_port.is_open:
-                if self.serial_port.in_waiting:
-                    line = self.serial_port.readline().decode('utf-8', errors='ignore').strip()
-                    if line:
-                        self.handle_telemetry_line(line)
-        except Exception as e:
-            print(f"Serial error: {e}")
-            self.serial_port = None
-            self.connect_button.setText("Connect")
-
-    def handle_telemetry_line(self, line):
-        print(f"Raw telemetry packet: {line}")  # Debugging line
-
-        parts = line.split(',')
-        if len(parts) != len(self.telemetry_fields):
-            print(f"Invalid telemetry packet (expected {len(self.telemetry_fields)} fields, got {len(parts)})")
-            return  # Skip this packet or handle it accordingly
-
-        data = dict(zip(self.telemetry_fields, parts))
-        self.latest_telemetry = data  # Store the latest telemetry data
-        self.telemetry_handler.telemetry_received.emit(data)  # Emit the signal to update the UI
-
-        # If logging enabled, save the telemetry line to the file
-        if self.logging_enabled and self.log_file_path:
-            threading.Thread(target=self.save_log, args=(line,), daemon=True).start()
-
-    def update_telemetry_ui(self, data):
-        # Update UI labels with new data
-        for key, value in data.items():
-            self.values[key].setText(value)
-
-    def update_telemetry_ui_periodically(self):
-        # This function will be called every second to update the telemetry UI.
-        if self.latest_telemetry:
-            self.update_telemetry_ui(self.latest_telemetry)
-
-    def toggle_logging(self, state):
-        self.logging_enabled = state == Qt.Checked
-        self.save_button.setEnabled(self.logging_enabled)
-        if self.logging_enabled and not self.log_file_path:
-            self.select_log_file()
-
-    def select_log_file(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save Log File", "", "CSV Files (.csv);;Text Files (.txt)")
-        if file_path:
-            self.log_file_path = file_path
-            QMessageBox.information(self, "Log File Selected", f"Telemetry will be saved to:\n{file_path}")
-        else:
-            self.logging_enabled = False
-            self.checkbox_logging.setChecked(False)
-
-    def save_log(self, line):
-        try:
-            with open(self.log_file_path, 'a') as f:
-                f.write(line + '\n')
-        except Exception as e:
-            print(f"Logging error: {e}")
-
-    def clear_telemetry(self):
-        for label in self.values.values():
-            label.setText("-")

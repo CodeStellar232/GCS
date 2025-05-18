@@ -1,173 +1,179 @@
 from PyQt5.QtWidgets import (
-    QWidget, QTextEdit, QLineEdit, QPushButton,QApplication,
-    QListWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea,
-    QGroupBox, QGridLayout, QComboBox
+    QApplication, QWidget, QTextEdit, QLineEdit, QPushButton,
+    QListWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
+    QGroupBox, QSizePolicy, QGridLayout
 )
 from PyQt5.QtGui import QTextCursor
-from PyQt5.QtCore import QTimer,Qt
+from PyQt5.QtCore import QTimer, Qt
 from datetime import datetime
 import serial
 import serial.tools.list_ports
 import sys
 
-
-class ConsoleUI(QWidget):
+class ConsolePage(QWidget):
     def __init__(self):
-        super(ConsoleUI, self).__init__()
-        self.setWindowTitle("GCS Console")
-        
-
-        # Main layout
-        main_layout = QGridLayout(self)
-        self.console_output = QTextEdit()
-        self.console_output.setReadOnly(True)
-        self.console_output.setPlaceholderText("Console Output...")
-        main_layout.addWidget(QLabel("Console Output"), 0, 0)
-        main_layout.addWidget(self.console_output, 1, 0, 2, 1)
-
-        # Command input layout
-        command_layout = QHBoxLayout()
-        self.command_input = QLineEdit()
-        self.command_input.setPlaceholderText("Enter Command")
-        self.send_button = QPushButton("Send")
-        self.send_button.clicked.connect(self.send_command)
-        self.command_input.returnPressed.connect(self.send_command)
-        command_layout.addWidget(self.command_input)
-        command_layout.addWidget(self.send_button)
-        main_layout.addLayout(command_layout, 3, 0)
-
-        self.command_history_list = QListWidget()
-        main_layout.addWidget(QLabel("Command History"), 0, 1)
-        main_layout.addWidget(self.command_history_list, 1, 1)
-
-        # Packet group
-        packet_group = QGroupBox("Packet Info")
-        packet_layout = QVBoxLayout()
-
-        self.packet_info_widget = QWidget()
-        self.packet_info_layout = QVBoxLayout(self.packet_info_widget)
-
-        self.packet_scroll_area = QScrollArea()
-        self.packet_scroll_area.setWidgetResizable(True)
-        self.packet_scroll_area.setWidget(self.packet_info_widget)
-
-        packet_layout.addWidget(self.packet_scroll_area)
-
-        self.packet_info_display = QTextEdit()
-        self.packet_info_display.setReadOnly(True)
-        self.packet_info_display.setPlaceholderText("Packet Info Summary...")
-        packet_layout.addWidget(self.packet_info_display)
-
-        packet_group.setLayout(packet_layout)
-        main_layout.addWidget(packet_group, 2, 1, 2, 1)
-
-        # Serial port layout
-        serial_layout = QHBoxLayout()
-        self.port_selector = QComboBox()
-        self.refresh_ports()
-        self.connect_button = QPushButton("Connect")
-        self.connect_button.clicked.connect(self.connect_serial)
-        serial_layout.addWidget(QLabel("Serial Port:"))
-        serial_layout.addWidget(self.port_selector)
-        serial_layout.addWidget(self.connect_button)
-        main_layout.addLayout(serial_layout, 4, 0, 1, 2)
-
-        self.command_history = []
-
-        # Packet Tracking Variables
+        super().__init__()
+        # self.serial_manager = serial_manager  # Store the SerialManager instance
+        self.serial_port = None
+        # Packet info tracking
         self.total_packets = 0
         self.missing_packets = 0
         self.corrupt_packets = 0
         self.last_packet_id = -1
         self.last_packet_time = "N/A"
-        self.serial_port = None
+        
+        self.headers = [
+            "Team ID", "Timestamp", "Packet Count", "Altitude", "Pressure", "Temperature", "Voltage",
+            "GNSS Time", "GNSS Latitude", "GNSS Longitude", "GNSS Altitude", "GNSS Satellites",
+            "Accel X", "Accel Y", "Accel Z", "Gyro X", "Gyro Y", "Gyro Z", "Flight State"
+        ]
+
+        self.value_labels = {}
+        self.packet_labels = {}
+
+        self.setup_ui()
+        self.auto_find_serial_port()
+
         self.serial_timer = QTimer()
         self.serial_timer.timeout.connect(self.read_serial_data)
+        self.serial_timer.start(200)
 
-    def refresh_ports(self):
-        self.port_selector.clear()
+    def setup_ui(self):
+        main_layout = QHBoxLayout(self)
+
+        console_group = QGroupBox("Console Dashboard")
+        console_layout = QVBoxLayout(console_group)
+
+        command_layout = QHBoxLayout()
+        command_layout.setSizeConstraint(QHBoxLayout.SetFixedSize)
+        self.command_input = QLineEdit()
+        self.command_input.setPlaceholderText("Enter Command")
+
+        self.send_button = QPushButton("Send")
+        self.send_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.send_button.setMinimumWidth(100)
+
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self.clear_button.setMinimumWidth(100) 
+
+        self.timestamp_checkbox = QCheckBox("Timestamp")
+        self.timestamp_checkbox.setChecked(True)
+        self.send_button.setMinimumWidth(100)
+
+        command_layout.addWidget(self.command_input)
+        command_layout.addWidget(self.send_button)
+        command_layout.addWidget(self.clear_button)
+        command_layout.addWidget(self.timestamp_checkbox)
+
+        self.console_output = QTextEdit()
+        self.console_output.setReadOnly(True)
+        self.console_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Add raw telemetry display widget
+        self.raw_telemetry_display = QTextEdit()  # Define the raw telemetry display
+        self.raw_telemetry_display.setReadOnly(True)
+        self.raw_telemetry_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        split_layout = QHBoxLayout()
+        split_layout.addWidget(self.console_output, 7)
+        split_layout.addWidget(self.raw_telemetry_display, 3)  # Add it to the layout
+
+        right_side_layout = QVBoxLayout()
+
+        self.command_history_list = QListWidget()
+        command_history_group = QGroupBox("Command History")
+        command_history_layout = QVBoxLayout(command_history_group)
+        command_history_layout.addWidget(self.command_history_list)
+
+        packet_info_group = QGroupBox("Packet Info")
+        packet_info_layout = QGridLayout()
+        packet_info_group.setLayout(packet_info_layout)
+        packet_info_group.setFixedHeight(300)
+
+        packet_headers = [
+            "Total Packets", "Missing Packets", "Packet Loss %", 
+            "Corrupt Packets", "Last Packet ID", "Last Packet Time"
+        ]
+        for row, name in enumerate(packet_headers):
+            packet_info_layout.addWidget(QLabel(f"{name}:"), row, 0)
+            label = QLabel("-")
+            self.packet_labels[name] = label
+            packet_info_layout.addWidget(label, row, 1)
+
+        right_side_layout.addWidget(command_history_group)
+        right_side_layout.addWidget(packet_info_group)
+        split_layout.addLayout(right_side_layout, 3)
+
+        console_layout.addLayout(command_layout)
+        console_layout.addLayout(split_layout)
+
+        main_layout.addWidget(console_group, 3)
+
+        telemetry_group = QGroupBox("Raw Telemetry")
+        telemetry_layout = QVBoxLayout(telemetry_group)
+        telemetry_values_layout = QGridLayout()
+        for i, header in enumerate(self.headers):
+            telemetry_values_layout.addWidget(QLabel(f"{header}:"), i, 0)
+            value_label = QLabel("-")
+            self.value_labels[header] = value_label
+            telemetry_values_layout.addWidget(value_label, i, 1)
+        telemetry_layout.addLayout(telemetry_values_layout)
+
+        main_layout.addWidget(telemetry_group, 1)
+
+        self.send_button.clicked.connect(self.send_command)
+        self.clear_button.clicked.connect(self.clear_console)
+        self.command_input.returnPressed.connect(self.send_command)
+        self.command_history_list.itemClicked.connect(lambda item: self.command_input.setText(item.text()))
+
+    def auto_find_serial_port(self):
         ports = serial.tools.list_ports.comports()
         for port in ports:
-            self.port_selector.addItem(port.device)
-
-    def connect_serial(self):
-        port = self.port_selector.currentText()
-        if port:
-            try:
-                self.serial_port = serial.Serial(port, 9600, timeout=0.1)
-                self.serial_timer.start(200)
-                self.console_output.append(f"[INFO] Connected to {port} at 9600 baud.")
-                self.textBrowser.setText(f"Arduino detected on port: {port}\n")
-            except Exception as e:
-                self.console_output.append(f"[ERROR] Could not open serial port: {str(e)}")
+            if "USB" in port.description or "COM" in port.device:
+                try:
+                    self.serial_port = serial.Serial(port.device, 9600, timeout=1)
+                    print(f"Connected to {port.device}")
+                    return
+                except Exception as e:
+                    print(f"Failed to connect to {port.device}: {e}")
 
     def read_serial_data(self):
         if self.serial_port and self.serial_port.in_waiting:
             try:
-                raw_line = self.serial_port.readline().decode("utf-8", errors="ignore").strip()
-                if raw_line:
-                    self.console_output.append(raw_line)
-                    self.console_output.moveCursor(QTextCursor.End)
+                line = self.serial_port.readline().decode('utf-8').strip()
+                if line:
+                    self.append_console(line)
+                    self.raw_telemetry_display.append(line)
+                    self.update_telemetry(line)
 
-                    packet_id = self.extract_packet_id(raw_line)
-                    is_corrupt = "FAIL" in raw_line
-                    self.add_packet_info(raw_line)
-                    self.update_packet_info(packet_id, is_corrupt=is_corrupt)
+                    packet_id = self.extract_packet_id(line)
+                    is_corrupt = "FAIL" in line
+                    self.update_packet_info(packet_id, is_corrupt)
             except Exception as e:
-                self.console_output.append(f"[ERROR] Failed to read serial: {str(e)}")
+                self.append_console(f"[ERROR]: {e}")
 
-    def send_command(self):
-        try:
-            command = self.command_input.text().strip()
-            if command:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_entry = f"[{timestamp}] SENT: {command}"
-                self.console_output.append(log_entry)
-                self.console_output.moveCursor(QTextCursor.End)
+    def append_console(self, text):
+        if self.timestamp_checkbox.isChecked():
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            text = f"[{timestamp}] {text}"
+        self.console_output.append(text)
+        self.console_output.moveCursor(QTextCursor.End)
 
-                self.command_history.append(command)
-                self.command_history_list.addItem(command)
-                self.command_input.clear()
-
-                if self.serial_port and self.serial_port.is_open:
-                    self.serial_port.write((command + '\n').encode())
-
-                packet_id = self.extract_packet_id(command)
-                self.add_packet_info(log_entry)
-                self.update_packet_info(packet_id)
-        except Exception as e:
-            self.console_output.append(f"[ERROR] {str(e)}")
-
-    def extract_packet_id(self, text: str):
-        try:
-            parts = text.strip().split()
-            for part in parts:
-                if part.isdigit():
-                    return int(part)
-            return self.last_packet_id + 1
-        except:
-            return self.last_packet_id + 1
-
-    def add_packet_info(self, message):
-        label = QLabel(message)
-        label.setWordWrap(True)
-        label.setStyleSheet("background-color: #e8f0ff; padding: 4px; border: 1px solid #ccc;")
-        self.packet_info_layout.addWidget(label)
-
-        max_labels = 100
-        if self.packet_info_layout.count() > max_labels:
-            widget_to_remove = self.packet_info_layout.takeAt(0).widget()
-            if widget_to_remove:
-                widget_to_remove.deleteLater()
+    def update_telemetry(self, line):
+        parts = line.split(',')
+        if len(parts) != len(self.headers):
+            return
+        for header, value in zip(self.headers, parts):
+            self.value_labels[header].setText(value)
 
     def update_packet_info(self, packet_id, is_corrupt=False):
         self.total_packets += 1
 
-        if self.last_packet_id != -1 and (packet_id - self.last_packet_id) > 1:
-            self.missing_packets += (packet_id - self.last_packet_id - 1)
-        elif self.last_packet_id == -1:
-            self.missing_packets = 0
-
+        if self.last_packet_id != -1:
+            gap = packet_id - self.last_packet_id
+            if gap > 1:
+                self.missing_packets += gap - 1
         self.last_packet_id = packet_id
         self.last_packet_time = datetime.now().strftime("%H:%M:%S")
 
@@ -175,46 +181,53 @@ class ConsoleUI(QWidget):
             self.corrupt_packets += 1
 
         total_expected = self.total_packets + self.missing_packets
-        packet_loss = (self.missing_packets / total_expected) * 100 if total_expected > 0 else 0
+        packet_loss = (self.missing_packets / total_expected) * 100 if total_expected else 0
 
-        self.packet_info_display.setPlainText(f"""
-Total Packets Received : {self.total_packets}
-Missing Packets        : {self.missing_packets}
-Packet Loss Percentage : {packet_loss:.2f}%
-Corrupt Packets        : {self.corrupt_packets}
-Last Packet ID         : {self.last_packet_id}
-Last Packet Time       : {self.last_packet_time}
-        """.strip())
+        self.packet_labels["Total Packets"].setText(str(self.total_packets))
+        self.packet_labels["Missing Packets"].setText(str(self.missing_packets))
+        self.packet_labels["Packet Loss %"].setText(f"{packet_loss:.2f}")
+        self.packet_labels["Corrupt Packets"].setText(str(self.corrupt_packets))
+        self.packet_labels["Last Packet ID"].setText(str(packet_id))
+        self.packet_labels["Last Packet Time"].setText(self.last_packet_time)
 
-    def clear_packet_info(self):
+    def extract_packet_id(self, line):
+        for part in line.split(','):
+            if part.isdigit():
+                return int(part)
+        return self.last_packet_id + 1
+
+    def send_command(self):
+        command = self.command_input.text().strip()
+        if command:
+            self.append_console(f"SENT: {command}")
+            self.command_history_list.addItem(command)
+            if self.serial_port and self.serial_port.is_open:
+                self.serial_port.write((command + '\n').encode())
+            self.command_input.clear()
+
+    def clear_console(self):
+        self.console_output.clear()
+        self.command_history_list.clear()
         self.total_packets = 0
         self.missing_packets = 0
         self.corrupt_packets = 0
         self.last_packet_id = -1
         self.last_packet_time = "N/A"
-        self.packet_info_display.clear()
+        for label in self.packet_labels.values():
+            label.setText("-")
+        for label in self.value_labels.values():
+            label.setText("-")
 
-        while self.packet_info_layout.count():
-            widget_to_remove = self.packet_info_layout.takeAt(0).widget()
-            if widget_to_remove:
-                widget_to_remove.deleteLater()
-
-
-class ConsolePageUI:
-    def setupUi(self, parent_widget):
-        parent_widget.setObjectName("ConsolePage")
-        layout = QVBoxLayout(parent_widget)
-        label = QLabel("Console Page Content Here")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-
-        if hasattr(self.console_ui, 'console_output') and self.console_ui.console_output is not None:
-            self.console_ui.console_output.append("Your message here")
+    def update_data(self, data):
+        """
+        Update the console with new data.
+        :param data: A string containing the new data.
+        """
+        self.console_output.append(data)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = ConsoleUI()
-    window.resize(900, 600)
+    window = ConsolePage(None)
     window.show()
     sys.exit(app.exec_())
